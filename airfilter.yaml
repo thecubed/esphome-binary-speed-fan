@@ -1,0 +1,80 @@
+esphome:
+  name: airfilter
+  platform: ESP8266
+  board: d1_mini
+
+wifi:
+  ssid: !secret WIFI_SSID
+  password: !secret WIFI_PASS
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+
+#status_led:
+#  pin:
+#    number: GPIO13
+#    inverted: True
+
+# wifi status
+sensor:
+  - platform: wifi_signal
+    name: "Air Filter Signal"
+    update_interval: 60s
+
+# 
+# Outputs here
+# Outputs are INTERNAL to esphome and must be referenced by a component to show in home-assistant
+# TRIACs are active-LOW, and must be high impedance when off
+## TODO: will pull-up drive triac in gate+ unintentionally?
+# NOTE: Must ensure multiple TRIACs are not enabled at once!
+# Use interlock groups+switch component if FAN component doesn't work right.
+# 
+output:
+  - platform: gpio
+    pin: 
+      number: D5
+      inverted: True
+      mode: OUTPUT_OPEN_DRAIN
+    id: fan_low
+  - platform: gpio
+    pin: 
+      number: D6
+      inverted: True
+      mode: OUTPUT_OPEN_DRAIN
+    id: fan_medium
+  - platform: gpio
+    pin: 
+      number: D7
+      inverted: True
+      mode: OUTPUT_OPEN_DRAIN
+    id: fan_high
+
+#
+# Switches here
+# Switches are EXTERNAL and show in home-assistant
+#
+switch:
+  - platform: gpio
+    pin: 
+      number: D1
+      inverted: True
+      mode: OUTPUT_OPEN_DRAIN
+    name: ionizer
+    id: ionizer
+
+#
+# Fan! The best part!
+#
+fan:
+  - platform: binaryspeed
+    output:
+      low: fan_low
+      medium: fan_medium
+      high: fan_high
+    name: fan
+
