@@ -6,6 +6,10 @@ esphome:
 wifi:
   ssid: !secret WIFI_SSID
   password: !secret WIFI_PASS
+  ap:
+    ssid: "ESPHome Airfilter"
+
+captive_portal:
 
 # Enable logging
 logger:
@@ -26,55 +30,94 @@ sensor:
     name: "Air Filter Signal"
     update_interval: 60s
 
-# 
-# Outputs here
-# Outputs are INTERNAL to esphome and must be referenced by a component to show in home-assistant
-# TRIACs are active-LOW, and must be high impedance when off
-## TODO: will pull-up drive triac in gate+ unintentionally?
-# NOTE: Must ensure multiple TRIACs are not enabled at once!
-# Use interlock groups+switch component if FAN component doesn't work right.
-# 
 output:
+  # Template output used for controlling which switch is active for which fan speed is active
+  # Speed Fan returns the speed as a float equal to (1.0 / <num_speeds>) * <speed>
+  # We cast it back to an integer (ain't nobody got time for comparing floats), and enable the correct switch.
+  - platform: template
+    id: fan_speed
+    type: float
+    write_action:
+      - if:
+          condition:
+            lambda: return state == 0.0;
+          then:
+            - switch.turn_off: fan_low
+            - switch.turn_off: fan_medium
+            - switch.turn_off: fan_high
+      - if:
+          condition:
+            lambda: return static_cast<int>(state * 3.0) == 1;
+          then:
+            - switch.turn_on: fan_low
+      - if:
+          condition:
+            lambda: return static_cast<int>(state * 3.0) == 2;
+          then:
+            - switch.turn_on: fan_medium
+      - if:
+          condition:
+            lambda: return static_cast<int>(state * 3.0) == 3;
+          then:
+            - switch.turn_on: fan_high
+      - logger.log:
+          format: "Received fan_speed write: %.3f"
+          args: [ 'state' ]
+
+# TRIACs are active-LOW, and must be high impedance when off
+# using interlock groups to ensure only one output is active at a time
+## TODO: will pull-up drive triac in gate+ unintentionally?
+switch:
   - platform: gpio
+    restore_mode: ALWAYS_OFF
     pin: 
       number: D5
       inverted: True
       mode: OUTPUT_OPEN_DRAIN
     id: fan_low
+    interlock: &interlock_group [fan_low, fan_medium, fan_high]
+    # name: "Fan Low"
   - platform: gpio
+    restore_mode: ALWAYS_OFF
     pin: 
       number: D6
       inverted: True
       mode: OUTPUT_OPEN_DRAIN
     id: fan_medium
+    interlock: *interlock_group
+    # name: "Fan Medium"
   - platform: gpio
+    restore_mode: ALWAYS_OFF
     pin: 
       number: D7
       inverted: True
       mode: OUTPUT_OPEN_DRAIN
     id: fan_high
-
-#
-# Switches here
-# Switches are EXTERNAL and show in home-assistant
-#
-switch:
+    interlock: *interlock_group
+    # name: "Fan High"
   - platform: gpio
+    restore_mode: ALWAYS_OFF
     pin: 
       number: D1
       inverted: True
       mode: OUTPUT_OPEN_DRAIN
-    name: ionizer
+    name: Air Filter Ionizer
     id: ionizer
 
 #
 # Fan! The best part!
 #
 fan:
-  - platform: binaryspeed
-    output:
-      low: fan_low
-      medium: fan_medium
-      high: fan_high
-    name: fan
+  - platform: speed
+    name: Air Filter
+    output: fan_speed
+    # low, medium, high
+    speed_count: 3
+    on_turn_off:
+      - output.set_level:
+          id: fan_speed
+          level: 0
+      - logger.log: "Fan Off"
+    on_turn_on:
+      - logger.log: "Fan On"
 
